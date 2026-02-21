@@ -262,7 +262,7 @@ export default async function handler(request: Request): Promise<Response> {
       };
       
       // Check if it's an Anthropic API error with additional properties
-      const errAny = err as Record<string, unknown>;
+      const errAny = err as unknown as Record<string, unknown>;
       if ('status' in errAny) errorDetails.status = errAny.status;
       if ('code' in errAny) errorDetails.code = errAny.code;
       if ('type' in errAny) errorDetails.type = errAny.type;
