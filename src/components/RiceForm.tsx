@@ -6,11 +6,12 @@ import type { RiceData } from '../types';
 interface Props {
   featureId: string;
   rice: RiceData | null;
+  showLearnPanel?: boolean;
 }
 
 const DEFAULT_RICE: Omit<RiceData, 'score'> = { reach: 0, impact: 1, confidence: 1.0, effort: 3 };
 
-export function RiceForm({ featureId, rice }: Props) {
+export function RiceForm({ featureId, rice, showLearnPanel = false }: Props) {
   const { updateFeature } = useFeatureStore();
   const data = rice ?? { ...DEFAULT_RICE, score: 0 };
 
@@ -24,7 +25,7 @@ export function RiceForm({ featureId, rice }: Props) {
   return (
     <div className="space-y-4">
       {/* Info panel */}
-      <FrameworkInfoPanel variant="rice" />
+      {showLearnPanel && <FrameworkInfoPanel variant="rice" />}
 
       {/* Score display */}
       <div className="flex items-center justify-between bg-indigo-50 rounded-xl px-4 py-3">

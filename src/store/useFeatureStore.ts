@@ -33,6 +33,7 @@ interface FeatureStore {
 
   setRiceManualRank: (id: string, rank: number | undefined) => void;
   setIceManualRank: (id: string, rank: number | undefined) => void;
+  clearManualRanks: (framework: 'rice' | 'ice' | 'both') => void;
 
   replaceFeatures: (features: Feature[]) => void;
   clearAll: () => void;
@@ -99,6 +100,16 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
     set({ features });
   },
 
+  clearManualRanks: (framework) => {
+    const features = get().features.map(f => ({
+      ...f,
+      ...(framework !== 'ice' ? { riceManualRank: undefined } : {}),
+      ...(framework !== 'rice' ? { iceManualRank: undefined } : {}),
+    }));
+    saveFeatures(features);
+    set({ features });
+  },
+
   replaceFeatures: (features) => {
     saveFeatures(features);
     set({ features });
@@ -116,7 +127,7 @@ export const useFeatureStore = create<FeatureStore>((set, get) => ({
   },
 }));
 
-export function sortByFramework(features: Feature[], framework: 'rice' | 'ice'): Feature[] {
+export function sortByFramework(features: Feature[], framework: 'rice' | 'ice', ascending = false): Feature[] {
   const manualKey = framework === 'rice' ? 'riceManualRank' : 'iceManualRank';
   const scoreKey = framework === 'rice' ? 'rice' : 'ice';
   const otherKey = framework === 'rice' ? 'ice' : 'rice';
@@ -131,7 +142,9 @@ export function sortByFramework(features: Feature[], framework: 'rice' | 'ice'):
   const manual = scored.filter(f => f[manualKey] !== undefined)
     .sort((a, b) => (a[manualKey] as number) - (b[manualKey] as number));
   const auto = scored.filter(f => f[manualKey] === undefined)
-    .sort((a, b) => (b[scoreKey]!.score) - (a[scoreKey]!.score));
+    .sort((a, b) => ascending
+      ? (a[scoreKey]!.score) - (b[scoreKey]!.score)
+      : (b[scoreKey]!.score) - (a[scoreKey]!.score));
 
   return [...manual, ...auto, ...partial, ...none];
 }

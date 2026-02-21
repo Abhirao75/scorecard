@@ -1,7 +1,7 @@
 # Scorecard — Product Requirements Document
 
-**Date:** 2026-02-19
-**Version:** 1.4 (added scoring completeness indicators)
+**Date:** 2026-02-20
+**Version:** 1.8 (manual override reset)
 
 ---
 
@@ -794,7 +794,444 @@ No new components required. Changes are localized to existing files:
 
 ---
 
-## 15. Design Decisions Log
+## 15. Context-Aware View Simplification (v1.5 Feature)
+
+### 15.1 Overview
+
+In v1.4 and earlier, every feature card always shows both RICE and ICE score chips, a RICE/ICE tab switcher, a per-card Learn collapsible, and the global Learn panel shows full comparison content regardless of which framework view is active. This creates unnecessary noise: when a user is focused on RICE scoring, ICE elements are irrelevant clutter, and vice versa.
+
+v1.5 makes the UI **context-aware**: what the user sees inside a feature card and above the ranked list changes based on whether they are in RICE view, ICE view, or Both view.
+
+---
+
+### 15.2 Behavior by View
+
+| Surface | RICE view | ICE view | Both view |
+|---|---|---|---|
+| Feature card scoring area | RICE form directly (no tabs) | ICE form directly (no tabs) | RICE / ICE tab switcher (existing behavior) |
+| Score chip(s) on card | RICE chip only | ICE chip only | Both chips (existing v1.4 behavior) |
+| Per-card Learn collapsible | Hidden (removed) | Hidden (removed) | Shown (existing behavior) |
+| Global Learn panel content | RICE-only content | ICE-only content | Full comparison content (existing behavior) |
+
+---
+
+### 15.3 Feature Card — Scoring Area
+
+**Current behavior (v1.4):** Every expanded feature card shows a `[RICE] [ICE]` tab switcher, regardless of the active view.
+
+**New behavior (v1.5):**
+
+- **RICE view**: The tab switcher is removed. The RICE scoring form renders directly in the card body with no tab chrome. Label/heading "RICE Score" is shown inline above the score output.
+- **ICE view**: The tab switcher is removed. The ICE scoring form renders directly in the card body. Label/heading "ICE Score" is shown inline.
+- **Both view**: The existing `[RICE] [ICE]` tab switcher is preserved and functions identically to current behavior.
+
+---
+
+### 15.4 Score Chips on Feature Cards
+
+**Current behavior (v1.4):** Both RICE and ICE chips always render on every card (with dimming when unscored, per v1.4 spec).
+
+**New behavior (v1.5):**
+
+- **RICE view**: Only the RICE chip renders. The ICE chip is not rendered at all (not dimmed, not a placeholder — fully absent).
+- **ICE view**: Only the ICE chip renders. The RICE chip is fully absent.
+- **Both view**: Both chips render exactly as specified in v1.4 (full opacity when scored, ~40% opacity with `RICE —` / `ICE —` placeholder when unscored).
+
+This overrides the v1.4 "always render both chips" behavior for single-framework views.
+
+---
+
+### 15.5 Per-Card Learn Collapsible
+
+**Current behavior (v1.4 / v1.2):** Every feature card, on both the RICE tab and ICE tab, shows a collapsible `📖 Learn how [X] scoring works ▾` panel scoped to that tab's framework.
+
+**New behavior (v1.5):**
+
+- **RICE view**: The per-card Learn collapsible is not rendered. The card shows only the form and score.
+- **ICE view**: Same — no per-card Learn collapsible.
+- **Both view**: The per-card Learn collapsible is retained on each tab (RICE tab shows RICE content, ICE tab shows ICE content), exactly as currently implemented.
+
+Rationale: In single-framework view, the global Learn panel above the ranked list already provides framework-specific reference. A second Learn entry point on every card is redundant and adds vertical clutter.
+
+---
+
+### 15.6 Global Learn Panel (Above Ranked List)
+
+**Current behavior:** The global `FrameworkInfoPanel` always shows full comparison content: RICE vs ICE comparison table, when-to-use guidance, worked example (both frameworks), and external links — regardless of active view.
+
+**New behavior (v1.5):**
+
+- **RICE view**: The global panel renders **RICE-only content**:
+  - RICE formula (color-coded)
+  - RICE field explanations with examples (Reach, Impact, Confidence, Effort)
+  - RICE score interpretation bands (500+, 100–499, 10–99, < 10)
+  - *(No ICE content, no comparison table, no ICE worked example)*
+
+- **ICE view**: The global panel renders **ICE-only content**:
+  - ICE formula (color-coded)
+  - ICE field explanations with examples (Impact, Confidence, Ease)
+  - ICE score interpretation bands (70–100, 40–69, 15–39, < 15)
+  - *(No RICE content, no comparison table)*
+
+- **Both view**: The global panel renders the **full comparison content** exactly as currently implemented (comparison table, when-to-use guidance, worked example for both frameworks, external links).
+
+The collapsed banner label updates to match the active view:
+- RICE view: `📖 Learn how RICE scoring works ▾`
+- ICE view: `📖 Learn how ICE scoring works ▾`
+- Both view: `📖 Learn how RICE and ICE scoring works ▾` (existing)
+
+The `FrameworkInfoPanel` component already accepts a `framework: 'rice' | 'ice' | 'global'` prop — v1.5 wires this prop to the active view state.
+
+---
+
+### 15.7 Summary of Changes to Prior Spec Sections
+
+| Prior section | Change |
+|---|---|
+| §6.2 Scoring Interface | Feature cards no longer always show tab switcher; tabs only appear in Both view |
+| §12 Framework Info Collapsibles | Global panel content is now view-scoped; per-card panels removed from single-framework views |
+| §14.3 Per-Card Completeness Indicator | "Always render both chips" behavior scoped to Both view only; single-framework views show only the relevant chip |
+
+---
+
+### 15.8 Component Changes
+
+No new components are required. Changes are localized to:
+
+| File | Change |
+|---|---|
+| `FeatureCard.tsx` | Conditionally render tab switcher only when `activeView === 'both'`; conditionally render per-card Learn collapsible only when `activeView === 'both'`; render only the relevant score chip based on `activeView`; pass `activeView` as a prop (or read from store) |
+| `RiceForm.tsx` | No changes to form logic; receives `showLearnPanel` prop (false when `activeView !== 'both'`) |
+| `IceForm.tsx` | Same as RiceForm.tsx |
+| `FrameworkInfoPanel.tsx` | Update content rendering to branch on `framework` prop: RICE-only content, ICE-only content, or full global content; update collapsed banner label |
+| `App.tsx` | Pass active view context down to `FeatureCard` and `FrameworkInfoPanel`; update `FrameworkInfoPanel` prop from hardcoded `'global'` to derived value: `'rice'` | `'ice'` | `'global'` based on active view toggle |
+
+---
+
+### 15.9 Acceptance Criteria
+
+- [ ] In RICE view, feature cards show the RICE form directly with no tab switcher
+- [ ] In ICE view, feature cards show the ICE form directly with no tab switcher
+- [ ] In Both view, feature cards show the `[RICE] [ICE]` tab switcher (unchanged from current behavior)
+- [ ] In RICE view, only the RICE score chip renders on each feature card (ICE chip is absent)
+- [ ] In ICE view, only the ICE score chip renders on each feature card (RICE chip is absent)
+- [ ] In Both view, both score chips render with full v1.4 completeness indicator behavior (scored = full opacity, unscored = dimmed with `—` placeholder)
+- [ ] In RICE view, no per-card Learn collapsible appears on any feature card
+- [ ] In ICE view, no per-card Learn collapsible appears on any feature card
+- [ ] In Both view, the per-card Learn collapsible on each tab is unchanged from current behavior
+- [ ] In RICE view, the global Learn panel shows only RICE content (formula, field explanations, score bands)
+- [ ] In ICE view, the global Learn panel shows only ICE content (formula, field explanations, score bands)
+- [ ] In Both view, the global Learn panel shows full comparison content (unchanged from current behavior)
+- [ ] The global Learn panel collapsed banner label reads `📖 Learn how RICE scoring works ▾` in RICE view, `📖 Learn how ICE scoring works ▾` in ICE view, and the existing label in Both view
+- [ ] Switching between views (RICE / ICE / Both) immediately updates all surfaces above without requiring a page reload
+- [ ] No regression to existing drag-and-drop, scoring, filtering, or export behavior
+
+---
+
+## 16. Both View Redesign (v1.6 Feature)
+
+### 16.1 Overview
+
+The v1 Both view rendered two independent side-by-side columns — RICE ranked on the left and ICE ranked on the right. While this made rank divergence visible, the dual-column layout duplicated every card and made the list harder to scan. v1.6 collapses Both view into a **single sorted column** with explicit sort controls and retained delta badges, giving users the divergence signal without the duplicated cards.
+
+---
+
+### 16.2 Layout Change
+
+**Before (v1.0–v1.5):** Two-column grid. RICE-ranked list on the left, ICE-ranked list on the right. Every feature card appears twice.
+
+**After (v1.6):** Single column. Every feature appears once. The active sort determines order. Delta badges surface the cross-framework disagreement.
+
+---
+
+### 16.3 Sort Controls
+
+Sort controls appear **directly above the ranked list**, only when Both view is active. They are not added to the main controls bar.
+
+**UI:**
+
+```
+Sort by:  [RICE ↑]  [RICE ↓]  [ICE ↑]  [ICE ↓]
+──────────────────────────────────────────────────
+#1      Feature Name  [ RICE 320.0 ]  [ ICE 56.0 ]
+#2  ▲2  Feature Name  [ RICE 280.0 ]  [ ICE 44.0 ]
+#3  ▼1  Feature Name  [ RICE 210.0 ]  [ ICE —    ]
+```
+
+**Four sort options:**
+
+| Button | Sort key | Direction |
+|---|---|---|
+| RICE ↑ | RICE score | High → Low (descending) |
+| RICE ↓ | RICE score | Low → High (ascending) |
+| ICE ↑ | ICE score | High → Low (descending) |
+| ICE ↓ | ICE score | Low → High (ascending) |
+
+**Active state:** The selected sort button is highlighted (indigo fill), matching the style of the framework toggle buttons.
+
+**Persistence:** The active sort is stored in `localStorage` under `scorecard-both-sort` (values: `'rice-desc'` | `'rice-asc'` | `'ice-desc'` | `'ice-asc'`). Both view remembers the last-used sort across page loads.
+
+**Default (first-ever use):** `'rice-desc'` (RICE high → low).
+
+---
+
+### 16.4 Rank Badge & Delta Badge
+
+Each row in the single-column Both view shows:
+- A **rank badge** — the feature's position in the current sort order (1-based)
+- A **delta badge** — how the feature's rank in the active sort framework compares to its rank in the other framework
+
+**Delta calculation:**
+
+- Sorted by RICE: `delta = riceRank − iceRank`
+  - `delta < 0` → ▲|delta| (feature ranks higher in RICE than ICE)
+  - `delta > 0` → ▼delta (feature ranks lower in RICE than ICE)
+  - `delta = 0` → no badge
+- Sorted by ICE: `delta = iceRank − riceRank`
+  - Same sign logic
+
+**Delta for unscored features:** If the other framework has no score for a feature, no delta badge is shown for that feature.
+
+**Direction when ascending:** The same delta calculation applies regardless of sort direction — delta always expresses the rank difference between the two frameworks, not the sort direction.
+
+---
+
+### 16.5 Unscored Features
+
+- Features without a score in the **active sort framework** appear at the bottom of the list, grayed out at ~50% opacity (same behavior as single-framework views).
+- Features with a score in the active sort framework but no score in the other framework: fully visible, ranked normally, no delta badge.
+
+---
+
+### 16.6 Drag-and-Drop in Both View
+
+Drag-and-drop manual reordering is **enabled** in the single-column Both view.
+
+- Dragging while sorted by RICE → sets `riceManualRank` (same store action as the RICE single-framework view)
+- Dragging while sorted by ICE → sets `iceManualRank` (same store action as the ICE single-framework view)
+- The manual override badge (⚠) still appears on cards with a manual rank set, consistent with single-framework view behavior
+- Drag-and-drop is **disabled** when "Sort by Completeness" is active, same as the existing single-framework rule
+
+---
+
+### 16.7 What Changes vs. What Stays the Same
+
+| Behavior | Change? |
+|---|---|
+| Both view column count | **Changed**: 2 columns → 1 column |
+| Sort controls | **New**: 4-button RICE↑/RICE↓/ICE↑/ICE↓ sort bar above the list, only in Both view |
+| Sort persistence | **New**: `scorecard-both-sort` in localStorage |
+| Rank badge | Unchanged — shows position in current sorted list |
+| Delta badge (▲▼) | Unchanged logic — still shows cross-framework rank divergence |
+| Both-view score chips | Unchanged — both RICE and ICE chips render on each card (v1.4 / v1.5 behavior) |
+| Per-card tabs & learn panel | Unchanged — tabs visible, learn panel on tabs (v1.5 behavior in Both view) |
+| "Sort by Completeness" toggle | Unchanged — still available; disables drag when active |
+| Drag-and-drop | **Changed**: now enabled in Both view; sets rank for the active sort framework |
+| Column headers ("RICE Ranked" / "ICE Ranked") | **Removed**: replaced by the sort control bar |
+
+---
+
+### 16.8 Component Changes
+
+| File | Change |
+|---|---|
+| `RankedList.tsx` | Replace `BothView` component: remove two-column grid; add single-column list; add sort state (read/write localStorage); add sort control bar JSX; compute both RICE and ICE rank maps; derive delta from active sort; wire drag-and-drop to active sort framework |
+
+No other files require changes.
+
+---
+
+### 16.9 Acceptance Criteria
+
+- [ ] Both view renders a single column (not two side-by-side columns)
+- [ ] Sort controls (RICE ↑, RICE ↓, ICE ↑, ICE ↓) appear above the list only when Both view is active
+- [ ] Active sort button is visually highlighted
+- [ ] Sort defaults to RICE ↑ on first use; subsequently remembers the last-used sort via `scorecard-both-sort` in localStorage
+- [ ] Switching between RICE/ICE/Both views does not reset the Both sort preference
+- [ ] Features are sorted by the active sort key and direction
+- [ ] Each row shows a rank badge (position in current sort) and, where applicable, a delta badge (▲▼ cross-framework rank difference)
+- [ ] Delta badge is absent when the feature has no score in the other framework
+- [ ] Features without a score in the active sort framework appear at the bottom, grayed out
+- [ ] Drag-and-drop reordering works in Both view; dragging while sorted by RICE sets `riceManualRank`; dragging while sorted by ICE sets `iceManualRank`
+- [ ] Manual override badge (⚠) still appears on manually-ranked cards
+- [ ] Drag-and-drop is disabled when Sort by Completeness is active
+- [ ] No regression to single-framework RICE/ICE view behavior
+
+---
+
+## 17. Unified Sort Dropdown (v1.7 Feature)
+
+### 17.1 Overview
+
+In v1.6, sort controls were split across two surfaces: a standalone "Sort: Completeness" toggle button in the global controls bar and an inline 4-button sort bar above the Both view list. v1.7 consolidates all sort controls into a single `<select>` dropdown in the global controls bar. The dropdown is context-aware — its options change based on the active view — and each view independently remembers its last-used sort.
+
+---
+
+### 17.2 Sort Dropdown
+
+**Placement:** In the global controls bar, after the framework toggle and before the tag filter. Always visible regardless of active view.
+
+**Control type:** Native `<select>` dropdown styled to match the existing tag and status filter dropdowns (same border, padding, `ChevronDown` overlay icon).
+
+**Label:** The selected option is displayed as the dropdown's current label. Each option is named so the selected state reads naturally (e.g. `RICE ↑`, `ICE ↓`, `Completeness`).
+
+---
+
+### 17.3 Options Per View
+
+| View | Dropdown options |
+|---|---|
+| RICE | `RICE ↑` (high → low), `RICE ↓` (low → high), `Completeness` |
+| ICE | `ICE ↑` (high → low), `ICE ↓` (low → high), `Completeness` |
+| Both | `RICE ↑`, `RICE ↓`, `ICE ↑`, `ICE ↓`, `Completeness` |
+
+When switching views, the dropdown re-renders with the option set for the new view and restores that view's last-used sort.
+
+---
+
+### 17.4 Completeness Sort Behavior
+
+Selecting `Completeness` sorts by how many frameworks are scored, tiered:
+
+1. **Both scored** — `rice` and `ice` both non-null. Sorted by active framework score descending within tier.
+2. **One scored** — exactly one of `rice` or `ice` is non-null. Sorted by whichever score exists.
+3. **Neither scored** — both `rice` and `ice` are null.
+
+This is the behavior of the existing `sortByCompletenessFirst` utility. When `Completeness` is selected, drag-and-drop is disabled (consistent with prior behavior).
+
+---
+
+### 17.5 Per-View Sort Persistence
+
+Each view has its own localStorage key and default:
+
+| View | localStorage key | Default |
+|---|---|---|
+| RICE | `scorecard-sort-rice` | `rice-desc` |
+| ICE | `scorecard-sort-ice` | `ice-desc` |
+| Both | `scorecard-sort-both` | `rice-desc` |
+
+Switching from RICE to ICE view restores ICE's last sort. Switching back to RICE restores RICE's last sort. Sort preferences are never cleared by "Clear filters."
+
+---
+
+### 17.6 What Is Removed
+
+| Removed element | Replaced by |
+|---|---|
+| "Sort: Completeness" standalone toggle button in controls bar | Dropdown `Completeness` option |
+| Both view inline sort bar (RICE ↑ / RICE ↓ / ICE ↑ / ICE ↓ buttons above the list) | Global dropdown |
+| `scorecard-both-sort` localStorage key | `scorecard-sort-both` |
+
+---
+
+### 17.7 "Clear Filters" Behavior
+
+Sort is a persistent display preference, not a filter. "Clear filters" only resets tag, status, and hide-scored. It does **not** reset the sort dropdown. `hasActiveFilters` no longer includes sort as a condition.
+
+---
+
+### 17.8 Component Changes
+
+| File | Change |
+|---|---|
+| `App.tsx` | Replace `sortByCompleteness` boolean state with three per-view sort states (`riceSortOption`, `iceSortOption`, `bothSortOption`), each initialized from localStorage. Add sort dropdown to controls bar with context-aware options. Remove "Sort: Completeness" button. Update `hasActiveFilters` and "Clear filters" to exclude sort. Pass `sortOption` to `RankedList`. |
+| `RankedList.tsx` | Update `Props` to accept `sortOption: SortOption` instead of `sortByCompleteness: boolean`. Derive `sortByCompleteness` internally as `sortOption === 'completeness'`. Remove Both view's own sort state, sort persistence, and inline sort bar. Update `sortForBothView` to accept `SortOption`. |
+| `types.ts` | Add `SortOption` type: `'rice-desc' \| 'rice-asc' \| 'ice-desc' \| 'ice-asc' \| 'completeness'`. |
+
+---
+
+### 17.9 Acceptance Criteria
+
+- [ ] Sort dropdown appears in the global controls bar for all views
+- [ ] RICE view dropdown shows only: `RICE ↑`, `RICE ↓`, `Completeness`
+- [ ] ICE view dropdown shows only: `ICE ↑`, `ICE ↓`, `Completeness`
+- [ ] Both view dropdown shows: `RICE ↑`, `RICE ↓`, `ICE ↑`, `ICE ↓`, `Completeness`
+- [ ] Dropdown label reflects the active selection at all times
+- [ ] Each view remembers its own last-used sort across page loads (localStorage)
+- [ ] Switching views restores the last sort used in that view
+- [ ] `Completeness` sort tiers features: both scored → one scored → neither
+- [ ] Drag-and-drop is disabled when `Completeness` sort is active
+- [ ] Both view no longer has an inline sort bar above the list
+- [ ] "Sort: Completeness" standalone button is removed
+- [ ] "Clear filters" does not reset the sort dropdown
+- [ ] No regression to filtering, scoring, or drag-and-drop behavior
+
+---
+
+## 18. Manual Override Reset (v1.8 Feature)
+
+### 18.1 Overview
+
+When a user drag-reorders features in RICE or ICE view, a `riceManualRank` or `iceManualRank` value is written to each feature and a ⚠ badge appears on the card. Until now there has been no way to remove these overrides other than re-dragging everything back to score order. v1.8 adds a **"Clear overrides"** button in the global controls bar that wipes the manual ranks for the current view's framework in one action.
+
+---
+
+### 18.2 Button Behavior
+
+**Placement:** In the controls bar, after the sort dropdown and before the hide-scored toggle. Conditionally rendered — only shown when at least one feature has a manual rank set for the current view's active framework.
+
+**Label:** `Clear overrides`
+
+**Visibility logic by view:**
+
+| View | Shown when |
+|---|---|
+| RICE | Any feature has `riceManualRank !== undefined` |
+| ICE | Any feature has `iceManualRank !== undefined` |
+| Both (sorted by RICE) | Any feature has `riceManualRank !== undefined` |
+| Both (sorted by ICE) | Any feature has `iceManualRank !== undefined` |
+| Both (sorted by Completeness) | Any feature has `riceManualRank !== undefined` OR `iceManualRank !== undefined` |
+
+**Action scope — clears only the current view's framework:**
+
+| View | What is cleared |
+|---|---|
+| RICE | `riceManualRank` set to `undefined` on all features |
+| ICE | `iceManualRank` set to `undefined` on all features |
+| Both (sorted by RICE) | `riceManualRank` set to `undefined` on all features |
+| Both (sorted by ICE) | `iceManualRank` set to `undefined` on all features |
+| Both (sorted by Completeness) | Both `riceManualRank` and `iceManualRank` cleared |
+
+---
+
+### 18.3 Confirmation Pattern
+
+The button uses the same two-click confirmation pattern as the existing delete button:
+
+1. **Default state:** `Clear overrides` — styled as a small outlined button (matching the hide-scored toggle style)
+2. **First click:** Button transitions to a confirmation state — text changes to `Confirm clear`, background changes to rose/red tint (`bg-rose-50 text-rose-600 border-rose-200`)
+3. **Second click:** Clears the manual ranks and button returns to default (or disappears if no overrides remain)
+4. **Blur / click away:** Resets button back to default state without clearing anything
+
+---
+
+### 18.4 Component Changes
+
+| File | Change |
+|---|---|
+| `useFeatureStore.ts` | Add `clearManualRanks(framework: 'rice' \| 'ice' \| 'both')` action — sets `riceManualRank` and/or `iceManualRank` to `undefined` on all features for the specified framework(s) |
+| `App.tsx` | Add `confirmClear` boolean state. Derive `hasManualOverrides` and `clearFramework` from `activeFramework` and `currentSortOption`. Render "Clear overrides" button conditionally. Wire click-to-confirm logic. |
+
+---
+
+### 18.5 Acceptance Criteria
+
+- [ ] "Clear overrides" button appears in the controls bar only when at least one feature has a manual rank for the current view's active framework
+- [ ] Button does not appear when no manual overrides are present
+- [ ] First click puts the button into a rose-tinted confirmation state with text "Confirm clear"
+- [ ] Second click clears the relevant manual ranks and the ⚠ badges disappear from affected cards
+- [ ] Clicking away (blur) cancels the confirmation without clearing anything
+- [ ] In RICE view, only `riceManualRank` is cleared; ICE ranks are unaffected
+- [ ] In ICE view, only `iceManualRank` is cleared; RICE ranks are unaffected
+- [ ] In Both view sorted by RICE, only `riceManualRank` is cleared
+- [ ] In Both view sorted by ICE, only `iceManualRank` is cleared
+- [ ] In Both view sorted by Completeness, both `riceManualRank` and `iceManualRank` are cleared
+- [ ] After clearing, the ranked list immediately re-sorts by score (no manual rank influencing order)
+
+---
+
+## 19. Design Decisions Log
 
 | Question                              | Decision                                          |
 |---------------------------------------|---------------------------------------------------|
@@ -839,3 +1276,29 @@ No new components required. Changes are localized to existing files:
 | "Hide scored" semantics               | Hides features with ANY score; shows only fully unscored (both null) — matches completeness definition |
 | Sorting: unscored always last         | Formalizes existing implicit behavior; completeness tier takes precedence over score within tier |
 | No new components needed              | Changes are confined to FeatureCard, App, RankedList, useFeatureStore — no new files |
+| v1.5: Card tabs in single-framework view | Removed entirely — form renders directly with no tab chrome; reduces cognitive load when focused on one framework |
+| v1.5: Score chips in single-framework view | Only the active framework's chip shown; other chip fully hidden (not dimmed) — overrides v1.4 "always render both" for single views |
+| v1.5: Per-card Learn in single-framework view | Removed; global panel already provides framework-specific reference, making per-card panel redundant |
+| v1.5: Global Learn panel scoping | Content scoped to active framework in single views; full comparison content retained in Both view only |
+| v1.5: Global Learn banner label | Updates dynamically to match active view ("RICE scoring", "ICE scoring", or "RICE and ICE scoring") |
+| v1.5: FrameworkInfoPanel prop wiring | `framework` prop changes from hardcoded `'global'` to derived from active view: `'rice'` / `'ice'` / `'global'` |
+| v1.6: Both view layout | Single column — removes duplicate cards, easier to scan; delta badges preserve cross-framework divergence signal |
+| v1.6: Sort control placement | Above the list in Both view only — keeps main controls bar uncluttered; contextually relevant |
+| v1.6: Sort options | 4 buttons (RICE ↑ / RICE ↓ / ICE ↑ / ICE ↓) — explicit and minimal; toggling direction is a common need |
+| v1.6: Sort persistence | `scorecard-both-sort` in localStorage — remembers last-used sort so users don't have to reset on every visit |
+| v1.6: Default sort | RICE high→low on first use — RICE is typically the more data-driven framework and a natural default |
+| v1.6: Delta badge in single column | Retained — expresses rank divergence between frameworks regardless of which framework is driving the sort |
+| v1.6: Drag-and-drop in Both view | Enabled; sets `riceManualRank` or `iceManualRank` based on active sort — consistent with single-framework view behavior, no new data model field needed |
+| v1.6: Column headers removed | "RICE Ranked" / "ICE Ranked" headers replaced by sort control bar — single column makes them redundant |
+| v1.7: Sort consolidation | Single dropdown replaces standalone completeness toggle + Both view inline sort bar — fewer controls, consistent placement |
+| v1.7: Dropdown placement | Global controls bar — always visible, no context-switching required |
+| v1.7: Options per view | Context-aware options (RICE view shows only RICE sorts, etc.) — reduces irrelevant choices |
+| v1.7: Completeness sort tier definition | Both scored → one scored → neither — more nuanced than binary scored/unscored; uses existing `sortByCompletenessFirst` |
+| v1.7: Per-view sort persistence | Each view remembers its own sort — switching back to RICE restores the last RICE sort without surprising the user |
+| v1.7: Sort excluded from "Clear filters" | Sort is a display preference, not a filter — clearing tag/status/hideScored should not disturb sort |
+| v1.7: SortOption type in types.ts | Centralised — used by both App.tsx and RankedList.tsx without circular imports |
+| v1.8: Reset placement | Global controls bar only (not per-card) — single action to clear all overrides is more efficient than hunting each card |
+| v1.8: Reset scope | Current view's framework only — avoids accidentally wiping overrides from a view the user isn't looking at |
+| v1.8: Both view + Completeness sort | Clears both frameworks — no single active framework in Completeness mode, so both are treated as in scope |
+| v1.8: Confirmation pattern | Two-click (same as delete) — destructive action that can't be undone; rose tint signals danger without requiring a modal |
+| v1.8: Conditional visibility | Button hidden when no overrides exist — avoids a permanently greyed-out control cluttering the bar |

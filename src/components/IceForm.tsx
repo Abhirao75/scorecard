@@ -6,6 +6,7 @@ import type { IceData } from '../types';
 interface Props {
   featureId: string;
   ice: IceData | null;
+  showLearnPanel?: boolean;
 }
 
 const DEFAULT_ICE: Omit<IceData, 'score'> = { impact: 5, confidence: 5, ease: 5 };
@@ -32,7 +33,7 @@ function ButtonGrid({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-export function IceForm({ featureId, ice }: Props) {
+export function IceForm({ featureId, ice, showLearnPanel = false }: Props) {
   const { updateFeature } = useFeatureStore();
   const data = ice ?? { ...DEFAULT_ICE, score: 0 };
 
@@ -46,7 +47,7 @@ export function IceForm({ featureId, ice }: Props) {
   return (
     <div className="space-y-4">
       {/* Info panel */}
-      <FrameworkInfoPanel variant="ice" />
+      {showLearnPanel && <FrameworkInfoPanel variant="ice" />}
 
       {/* Score display */}
       <div className="flex items-center justify-between bg-violet-50 rounded-xl px-4 py-3">
