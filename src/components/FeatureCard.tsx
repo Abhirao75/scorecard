@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronUp, Copy, Trash2, GripVertical, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Trash2, GripVertical, AlertCircle, Ticket } from 'lucide-react';
 import { useFeatureStore } from '../store/useFeatureStore';
 import { RiceForm } from './RiceForm';
 import { IceForm } from './IceForm';
@@ -10,6 +10,7 @@ interface Props {
   feature: Feature;
   showDragHandle?: boolean;
   dragHandleProps?: Record<string, unknown>;
+  onGenerateTickets?: (feature: Feature) => void;
 }
 
 const STATUS_OPTIONS: { value: Status; label: string; color: string }[] = [
@@ -18,11 +19,11 @@ const STATUS_OPTIONS: { value: Status; label: string; color: string }[] = [
   { value: 'done', label: 'Done', color: 'bg-emerald-100 text-emerald-700' },
 ];
 
-export function FeatureCard({ feature, showDragHandle, dragHandleProps }: Props) {
+export function FeatureCard({ feature, showDragHandle, dragHandleProps, onGenerateTickets }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<'rice' | 'ice'>('rice');
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { updateFeature, deleteFeature, duplicateFeature, allTags } = useFeatureStore();
+  const { updateFeature, deleteFeature, duplicateFeature, allTags, activeFramework } = useFeatureStore();
 
   const hasManualOverride = feature.riceManualRank !== undefined || feature.iceManualRank !== undefined;
 
@@ -72,6 +73,11 @@ export function FeatureCard({ feature, showDragHandle, dragHandleProps }: Props)
                   <AlertCircle className="w-3.5 h-3.5" />
                 </span>
               )}
+              {onGenerateTickets && (
+                <button onClick={() => onGenerateTickets(feature)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Generate Tickets">
+                  <Ticket className="w-3.5 h-3.5" />
+                </button>
+              )}
               <button onClick={() => duplicateFeature(feature.id)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Duplicate">
                 <Copy className="w-3.5 h-3.5" />
               </button>
@@ -100,13 +106,17 @@ export function FeatureCard({ feature, showDragHandle, dragHandleProps }: Props)
               ))}
             </select>
 
-            {/* Score chips — always rendered; dimmed when unscored */}
-            <span className={`text-xs font-semibold px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full transition-opacity ${!feature.rice ? 'opacity-40' : ''}`}>
-              {feature.rice ? `RICE ${feature.rice.score.toFixed(1)}` : 'RICE —'}
-            </span>
-            <span className={`text-xs font-semibold px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full transition-opacity ${!feature.ice ? 'opacity-40' : ''}`}>
-              {feature.ice ? `ICE ${feature.ice.score.toFixed(1)}` : 'ICE —'}
-            </span>
+            {/* Score chips — show only the relevant framework(s) for the active view */}
+            {(activeFramework === 'rice' || activeFramework === 'both') && (
+              <span className={`text-xs font-semibold px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full transition-opacity ${!feature.rice ? 'opacity-40' : ''}`}>
+                {feature.rice ? `RICE ${feature.rice.score.toFixed(1)}` : 'RICE —'}
+              </span>
+            )}
+            {(activeFramework === 'ice' || activeFramework === 'both') && (
+              <span className={`text-xs font-semibold px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full transition-opacity ${!feature.ice ? 'opacity-40' : ''}`}>
+                {feature.ice ? `ICE ${feature.ice.score.toFixed(1)}` : 'ICE —'}
+              </span>
+            )}
 
             {/* Tags */}
             {feature.tags.map(t => (
@@ -126,22 +136,29 @@ export function FeatureCard({ feature, showDragHandle, dragHandleProps }: Props)
       {/* Expanded panel */}
       {expanded && (
         <div className="border-t border-gray-100 px-4 pb-4 pt-4">
-          {/* Tabs */}
-          <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
-            {(['rice', 'ice'] as const).map(t => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
-                  tab === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {t.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {tab === 'rice' ? (
+          {activeFramework === 'both' ? (
+            <>
+              {/* Tabs — only in Both view */}
+              <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
+                {(['rice', 'ice'] as const).map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setTab(t)}
+                    className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
+                      tab === t ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {t.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              {tab === 'rice' ? (
+                <RiceForm featureId={feature.id} rice={feature.rice} showLearnPanel />
+              ) : (
+                <IceForm featureId={feature.id} ice={feature.ice} showLearnPanel />
+              )}
+            </>
+          ) : activeFramework === 'rice' ? (
             <RiceForm featureId={feature.id} rice={feature.rice} />
           ) : (
             <IceForm featureId={feature.id} ice={feature.ice} />

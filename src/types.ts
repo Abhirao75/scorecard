@@ -30,3 +30,20 @@ export interface Feature {
 }
 
 export type Framework = 'rice' | 'ice' | 'both';
+
+export type SortOption = 'rice-desc' | 'rice-asc' | 'ice-desc' | 'ice-asc' | 'completeness';
+
+export type TicketType = 'epic' | 'story';
+export type TicketPriority = 'Highest' | 'High' | 'Medium' | 'Low';
+
+export interface GeneratedTicket {
+  type: TicketType;
+  title: string;
+  userStory: string;
+  description: string;
+  acceptanceCriteria: string[];
+  storyPoints: number;
+  priority: TicketPriority;
+  tags: string[];
+  parentEpic: string | null;
+}

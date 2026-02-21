@@ -14,8 +14,17 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useFeatureStore, sortByFramework, sortByCompletenessFirst } from '../store/useFeatureStore';
+import { useSelectionStore } from '../store/useSelectionStore';
 import { FeatureCard } from './FeatureCard';
-import type { Feature } from '../types';
+import type { Feature, SortOption } from '../types';
+
+function sortForBothView(features: Feature[], sortOption: SortOption): Feature[] {
+  if (sortOption === 'completeness') return sortByCompletenessFirst(features, 'rice');
+
+  const framework: 'rice' | 'ice' = sortOption.startsWith('rice') ? 'rice' : 'ice';
+  const ascending = sortOption.endsWith('asc');
+  return sortByFramework(features, framework, ascending);
+}
 
 function RankBadge({ rank }: { rank: number }) {
   return (
@@ -41,22 +50,33 @@ function SortableRow({
   delta,
   framework,
   disableDrag,
+  onGenerateTickets,
 }: {
   feature: Feature;
   rank: number;
   delta?: number;
   framework: 'rice' | 'ice';
   disableDrag?: boolean;
+  onGenerateTickets?: (feature: Feature) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: feature.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const { toggle, isSelected } = useSelectionStore();
 
   const isUnscored = framework === 'rice' ? !feature.rice : !feature.ice;
   const showHandle = !isUnscored && !disableDrag;
+  const selected = isSelected(feature.id);
 
   return (
     <div ref={setNodeRef} style={style} className={`flex items-start gap-2 ${isUnscored ? 'opacity-50' : ''}`}>
       <div className="mt-3 flex items-center gap-1.5">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={() => toggle(feature.id)}
+          onClick={(e) => e.stopPropagation()}
+          className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+        />
         <RankBadge rank={rank} />
         {delta !== undefined && <DeltaBadge delta={delta} />}
       </div>
@@ -65,6 +85,7 @@ function SortableRow({
           feature={feature}
           showDragHandle={showHandle}
           dragHandleProps={{ ...attributes, ...listeners }}
+          onGenerateTickets={onGenerateTickets}
         />
       </div>
     </div>
@@ -74,16 +95,19 @@ function SortableRow({
 function SingleFrameworkList({
   features,
   framework,
-  sortByCompleteness,
+  sortOption,
+  onGenerateTickets,
 }: {
   features: Feature[];
   framework: 'rice' | 'ice';
-  sortByCompleteness?: boolean;
+  sortOption: SortOption;
+  onGenerateTickets?: (feature: Feature) => void;
 }) {
   const { setRiceManualRank, setIceManualRank } = useFeatureStore();
-  const sorted = sortByCompleteness
+  const isCompleteness = sortOption === 'completeness';
+  const sorted = isCompleteness
     ? sortByCompletenessFirst(features, framework)
-    : sortByFramework(features, framework);
+    : sortByFramework(features, framework, sortOption.endsWith('asc'));
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
   function handleDragEnd(event: DragEndEvent) {
@@ -103,7 +127,7 @@ function SingleFrameworkList({
       <SortableContext items={sorted.map(f => f.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-3">
           {sorted.map((feature, i) => (
-            <SortableRow key={feature.id} feature={feature} rank={i + 1} framework={framework} disableDrag={sortByCompleteness} />
+            <SortableRow key={feature.id} feature={feature} rank={i + 1} framework={framework} disableDrag={isCompleteness} onGenerateTickets={onGenerateTickets} />
           ))}
           {sorted.length === 0 && <EmptyState />}
         </div>
@@ -112,71 +136,59 @@ function SingleFrameworkList({
   );
 }
 
-function BothView({ features, sortByCompleteness }: { features: Feature[]; sortByCompleteness?: boolean }) {
-  const riceList = sortByCompleteness
-    ? sortByCompletenessFirst(features, 'rice')
-    : sortByFramework(features, 'rice');
-  const iceList = sortByCompleteness
-    ? sortByCompletenessFirst(features, 'ice')
-    : sortByFramework(features, 'ice');
+function BothView({ features, sortOption, onGenerateTickets }: { features: Feature[]; sortOption: SortOption; onGenerateTickets?: (feature: Feature) => void }) {
+  const { setRiceManualRank, setIceManualRank } = useFeatureStore();
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const isCompleteness = sortOption === 'completeness';
+  const activeFramework: 'rice' | 'ice' = sortOption === 'completeness' || sortOption.startsWith('ice') ? 'ice' : 'rice';
 
-  const riceRankMap = new Map(riceList.map((f, i) => [f.id, i + 1]));
-  const iceRankMap = new Map(iceList.map((f, i) => [f.id, i + 1]));
+  // Natural rank maps for delta computation — always score-based descending
+  const riceNaturalRankMap = new Map(sortByFramework(features, 'rice').map((f, i) => [f.id, i + 1]));
+  const iceNaturalRankMap = new Map(sortByFramework(features, 'ice').map((f, i) => [f.id, i + 1]));
+
+  const sorted = sortForBothView(features, sortOption);
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = sorted.findIndex(f => f.id === active.id);
+    const newIndex = sorted.findIndex(f => f.id === over.id);
+    const reordered = arrayMove(sorted, oldIndex, newIndex);
+    reordered.forEach((f, i) => {
+      if (activeFramework === 'rice') setRiceManualRank(f.id, i);
+      else setIceManualRank(f.id, i);
+    });
+  }
 
   return (
-    <div className="grid grid-cols-2 gap-6">
-      {/* RICE column */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-2 h-2 rounded-full bg-indigo-500" />
-          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">RICE Ranked</h3>
-        </div>
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={sorted.map(f => f.id)} strategy={verticalListSortingStrategy}>
         <div className="space-y-3">
-          {riceList.map((feature, i) => {
-            const iceRank = iceRankMap.get(feature.id);
-            const delta = iceRank !== undefined ? i + 1 - iceRank : undefined;
+          {sorted.map((feature, i) => {
+            const riceNaturalRank = riceNaturalRankMap.get(feature.id);
+            const iceNaturalRank = iceNaturalRankMap.get(feature.id);
+            let delta: number | undefined;
+            if (feature.rice && feature.ice && riceNaturalRank !== undefined && iceNaturalRank !== undefined) {
+              delta = activeFramework === 'rice'
+                ? riceNaturalRank - iceNaturalRank
+                : iceNaturalRank - riceNaturalRank;
+            }
             return (
-              <div key={feature.id} className="flex items-start gap-2">
-                <div className="mt-3 flex items-center gap-1.5">
-                  <RankBadge rank={i + 1} />
-                  {delta !== undefined && <DeltaBadge delta={delta} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <FeatureCard feature={feature} />
-                </div>
-              </div>
+              <SortableRow
+                key={feature.id}
+                feature={feature}
+                rank={i + 1}
+                delta={delta}
+                framework={activeFramework}
+                disableDrag={isCompleteness}
+                onGenerateTickets={onGenerateTickets}
+              />
             );
           })}
-          {riceList.length === 0 && <EmptyState />}
+          {sorted.length === 0 && <EmptyState />}
         </div>
-      </div>
-
-      {/* ICE column */}
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-2 h-2 rounded-full bg-violet-500" />
-          <h3 className="text-sm font-bold text-gray-700 uppercase tracking-wider">ICE Ranked</h3>
-        </div>
-        <div className="space-y-3">
-          {iceList.map((feature, i) => {
-            const riceRank = riceRankMap.get(feature.id);
-            const delta = riceRank !== undefined ? i + 1 - riceRank : undefined;
-            return (
-              <div key={feature.id} className="flex items-start gap-2">
-                <div className="mt-3 flex items-center gap-1.5">
-                  <RankBadge rank={i + 1} />
-                  {delta !== undefined && <DeltaBadge delta={delta} />}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <FeatureCard feature={feature} />
-                </div>
-              </div>
-            );
-          })}
-          {iceList.length === 0 && <EmptyState />}
-        </div>
-      </div>
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }
 
@@ -192,10 +204,11 @@ interface Props {
   filterTag: string;
   filterStatus: string;
   hideScored?: boolean;
-  sortByCompleteness?: boolean;
+  sortOption: SortOption;
+  onGenerateTickets?: (feature: Feature) => void;
 }
 
-export function RankedList({ filterTag, filterStatus, hideScored, sortByCompleteness }: Props) {
+export function RankedList({ filterTag, filterStatus, hideScored, sortOption, onGenerateTickets }: Props) {
   const { features, activeFramework } = useFeatureStore();
 
   const filtered = features.filter(f => {
@@ -206,14 +219,15 @@ export function RankedList({ filterTag, filterStatus, hideScored, sortByComplete
   });
 
   if (activeFramework === 'both') {
-    return <BothView features={filtered} sortByCompleteness={sortByCompleteness} />;
+    return <BothView features={filtered} sortOption={sortOption} onGenerateTickets={onGenerateTickets} />;
   }
 
   return (
     <SingleFrameworkList
       features={filtered}
       framework={activeFramework as 'rice' | 'ice'}
-      sortByCompleteness={sortByCompleteness}
+      sortOption={sortOption}
+      onGenerateTickets={onGenerateTickets}
     />
   );
 }
